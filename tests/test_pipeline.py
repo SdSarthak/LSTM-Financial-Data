@@ -128,6 +128,7 @@ def test_multivariate_run_skips_the_recursive_forecast(tmp_path):
     assert run.future_forecast is None
     assert "forecast_plot" not in run.artifacts
     assert run.config["features"] == list(DEFAULT_RETURN_FEATURE_COLUMNS)
+    assert "Recursive forecast: skipped" in run.report()
 
 
 def test_multi_step_horizon_predicts_a_price_path(tmp_path):

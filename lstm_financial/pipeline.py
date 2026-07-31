@@ -81,6 +81,13 @@ class ForecastRun:
                 f"first {forecast[0]:.2f}, last {forecast[-1]:.2f}, "
                 f"min {forecast.min():.2f}, max {forecast.max():.2f}",
             ]
+        elif len(self.config.get("features", [])) > 1:
+            lines += [
+                "",
+                "Recursive forecast: skipped - it needs a univariate model. "
+                "Re-run with a single --features column, or use --horizon for "
+                "direct multi-step forecasting.",
+            ]
         if self.artifacts:
             lines += ["", "Artifacts:"] + [f"  {k}: {v}" for k, v in self.artifacts.items()]
         return "\n".join(lines)
