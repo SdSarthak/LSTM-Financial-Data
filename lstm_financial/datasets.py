@@ -8,6 +8,7 @@ the environment-driven :class:`~lstm_financial.config.Settings`.
 from __future__ import annotations
 
 import re
+import warnings
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -273,13 +274,17 @@ def _flatten_headers(header_block: pd.DataFrame) -> tuple[list[str], list[str]]:
     counts: dict[str, int] = {}
     for column in header_block.columns:
         parts: list[str] = []
-        for row in filled:
+        for original_row, row in zip(rows, filled):
             value = row[column]
             text = "" if pd.isna(value) else str(value).strip()
             if not text or text in parts:
                 continue
             if parts and not _is_child_label(parts[-1], text):
-                continue
+                if pd.isna(original_row[column]):
+                    # A forward-filled label from a neighbouring section.
+                    continue
+                # The cell has its own value, so it starts a new hierarchy.
+                parts = []
             parts.append(text)
         paths.append(" / ".join(parts))
         if parts:
@@ -341,7 +346,10 @@ def load_rbi_indicators(
 
     label_name = names[label_column]
     label = frame[label_name]
-    as_datetime = pd.to_datetime(label, errors="coerce")
+    with warnings.catch_warnings():
+        # Mixed year labels ('2024-25') and timestamps live in the same column.
+        warnings.simplefilter("ignore", UserWarning)
+        as_datetime = pd.to_datetime(label, errors="coerce")
     drop = [label_name] + [c for c in frame.columns if c.startswith("column_")]
 
     if as_datetime.notna().sum() >= max(3, 0.5 * label.notna().sum()):
