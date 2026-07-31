@@ -1,0 +1,59 @@
+# --- secrets / credentials ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+serviceAccount*.json
+kaggle.json
+
+# --- data (never commit raw or derived datasets) ---
+data/
+datasets/
+raw/
+*.csv
+*.parquet
+*.feather
+*.db
+*.sqlite
+*.sqlite3
+*.xlsx
+*.xls
+*.h5
+*.hdf5
+!tests/fixtures/*.csv
+
+# --- model artifacts / run outputs ---
+artifacts/
+outputs/
+runs/
+*.keras
+*.pkl
+*.joblib
+*.png
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+venv/
+env/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- notebooks ---
+.ipynb_checkpoints/
+
+# --- editors / os ---
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
