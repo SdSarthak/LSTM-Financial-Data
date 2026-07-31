@@ -111,19 +111,35 @@ def test_economic_series_raises_for_unknown_code(economic_csv):
 
 def test_rbi_quarterly_sheet_is_parsed(rbi_workbook):
     frame = datasets.load_rbi_indicators(path=rbi_workbook, sheet="Quarterly")
-    assert list(frame.columns)[:2] == ["period", "gva_at_basic_prices"]
-    assert frame["period"].tolist() == ["2024-25 Q4", "2024-25 Q3", "2024-25 Q2", "2023-24 Q4"]
-    assert frame["gva_at_basic_prices"].iloc[0] == pytest.approx(6.7)
+    assert list(frame.columns)[:3] == ["period", "date", "gva_at_basic_prices"]
+    # The sheet is newest-first; the loader returns it oldest-first.
+    assert frame["period"].tolist() == ["2023-24 Q4", "2024-25 Q2", "2024-25 Q3", "2024-25 Q4"]
+    assert frame["date"].is_monotonic_increasing
+    assert frame["gva_at_basic_prices"].iloc[-1] == pytest.approx(6.7)
     # '..' becomes NaN rather than a string.
-    assert np.isnan(frame["deposits"].iloc[2])
+    assert np.isnan(frame.loc[frame["period"] == "2024-25 Q2", "deposits"]).all()
     assert frame.attrs["indicator_paths"]["agriculture"].startswith("1 Real Sector")
+
+
+@pytest.mark.parametrize(
+    ("period", "expected"),
+    [("2024-25 Q1", "2024-04-01"), ("2024-25 Q3", "2024-10-01"), ("2024-25 Q4", "2025-01-01")],
+)
+def test_fiscal_quarter_start(period, expected):
+    assert datasets.fiscal_quarter_start(period) == pd.Timestamp(expected)
+
+
+def test_fiscal_quarter_start_ignores_other_labels():
+    assert datasets.fiscal_quarter_start("2024-25") is None
+    assert datasets.fiscal_quarter_start("Notes") is None
 
 
 def test_rbi_monthly_sheet_is_parsed(rbi_workbook):
     frame = datasets.load_rbi_indicators(path=rbi_workbook, sheet="Monthly")
     assert "date" in frame.columns
-    assert frame["date"].iloc[0] == pd.Timestamp("2025-04-30")
-    assert frame["index_of_industrial_production"].iloc[0] == pytest.approx(2.5)
+    assert frame["date"].is_monotonic_increasing
+    assert frame["date"].iloc[-1] == pd.Timestamp("2025-04-30")
+    assert frame["index_of_industrial_production"].iloc[-1] == pytest.approx(2.5)
     assert {"deposits", "credit"} <= set(frame.columns)
     # The stray '2025' grouping row is not data.
     assert len(frame) == 3

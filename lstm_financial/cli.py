@@ -10,9 +10,13 @@ import pandas as pd
 
 from . import datasets
 from .config import Settings, get_settings
-from .features import DEFAULT_FEATURE_COLUMNS, add_technical_indicators
+from .features import (
+    DEFAULT_FEATURE_COLUMNS,
+    DEFAULT_RETURN_FEATURE_COLUMNS,
+    add_technical_indicators,
+)
 from .model import tensorflow_available
-from .pipeline import run_forecast
+from .pipeline import TARGET_MODES, run_forecast
 from .plots import plot_series
 
 BANNER = "=" * 72
@@ -32,10 +36,21 @@ def _add_training_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--forecast-steps", type=int, default=30)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
+        "--target-mode",
+        choices=list(TARGET_MODES),
+        default="return",
+        help="predict the next log return (default) or the price level directly",
+    )
+    parser.add_argument(
         "--features",
         nargs="+",
-        default=list(DEFAULT_FEATURE_COLUMNS),
-        help="feature columns to feed the model (use 'close' alone for a univariate run)",
+        default=None,
+        help=(
+            "feature columns to feed the model; defaults to "
+            f"{list(DEFAULT_RETURN_FEATURE_COLUMNS)} for --target-mode return and "
+            f"{list(DEFAULT_FEATURE_COLUMNS)} for --target-mode level. "
+            "A single feature enables the recursive multi-step forecast."
+        ),
     )
     parser.add_argument("--artifacts-dir", default=None, help="where plots and the model are written")
     parser.add_argument("--quiet", action="store_true", help="silence Keras progress bars")
@@ -61,7 +76,8 @@ def _training_kwargs(args: argparse.Namespace) -> dict:
         "validation_fraction": args.validation_fraction,
         "forecast_steps": args.forecast_steps,
         "seed": args.seed,
-        "feature_columns": tuple(args.features),
+        "target_mode": args.target_mode,
+        "feature_columns": tuple(args.features) if args.features else None,
         "verbose": 0 if args.quiet else 1,
     }
 
@@ -127,7 +143,9 @@ def command_economic(args: argparse.Namespace, settings: Settings) -> int:
           f"{frame.index.min().date()} -> {frame.index.max().date()}")
     print(BANNER)
     kwargs = _training_kwargs(args)
-    kwargs["feature_columns"] = ("close",)
+    # Macro series are short and have no volume or intraday range, so the
+    # technical indicator set does not apply: model the series itself.
+    kwargs["feature_columns"] = ("close",) if args.target_mode == "level" else ("log_return",)
     run = run_forecast(
         frame,
         name=f"econ_{args.series_code.lower()}",
@@ -157,11 +175,13 @@ def command_explore(args: argparse.Namespace, settings: Settings) -> int:
         print(summary.head(args.limit).to_string())
     elif args.dataset == "rbi":
         frame = datasets.load_rbi_indicators(path=args.rbi_file, sheet=args.sheet, settings=settings)
-        print(f"sheet {args.sheet!r}: {len(frame)} periods, {frame.shape[1] - 1} indicators")
+        indicators = [c for c in frame.columns if c not in {"period", "date"}]
+        print(f"sheet {args.sheet!r}: {len(frame)} periods, {len(indicators)} indicators")
         print(f"periods: {frame['period'].iloc[0]} -> {frame['period'].iloc[-1]}")
-        for column in list(frame.columns)[1 : args.limit + 1]:
+        paths = frame.attrs.get("indicator_paths", {})
+        for column in indicators[: args.limit]:
             coverage = frame[column].notna().sum()
-            print(f"  {column}  ({coverage} observations)")
+            print(f"  {column}  ({coverage} observations)  {paths.get(column, '')}")
     else:  # pragma: no cover - argparse restricts the choices
         raise SystemExit(f"unknown dataset {args.dataset!r}")
     return 0

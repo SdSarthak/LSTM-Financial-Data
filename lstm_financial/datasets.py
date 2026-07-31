@@ -233,8 +233,24 @@ def economic_series(
 # --------------------------------------------------------------------------
 
 
+_FISCAL_QUARTER_RE = re.compile(r"^(?P<year>\d{4})(?:-\d{2,4})?\s*Q(?P<quarter>[1-4])$")
+
+# Indian fiscal quarters: Q1 starts in April of the first year of the label.
+_FISCAL_QUARTER_MONTHS = {1: (0, 4), 2: (0, 7), 3: (0, 10), 4: (1, 1)}
+
+
 def _is_blank_row(row: pd.Series) -> bool:
     return bool(row.isna().all())
+
+
+def fiscal_quarter_start(period: str) -> pd.Timestamp | None:
+    """``"2024-25 Q3"`` -> ``2024-10-01`` (Indian fiscal year convention)."""
+    match = _FISCAL_QUARTER_RE.match(str(period).strip())
+    if not match:
+        return None
+    year = int(match.group("year"))
+    year_offset, month = _FISCAL_QUARTER_MONTHS[int(match.group("quarter"))]
+    return pd.Timestamp(year=year + year_offset, month=month, day=1)
 
 
 _NUMBERING_RE = re.compile(r"^(\d+(?:\.\d+)*)")
@@ -330,7 +346,10 @@ def load_rbi_indicators(
     """
     settings = settings or get_settings()
     xlsx_path = _resolve(path, settings.rbi_path)
-    raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
+    with warnings.catch_warnings():
+        # The workbook ships without a default style; openpyxl supplies one.
+        warnings.simplefilter("ignore", UserWarning)
+        raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
     label_row, label_column = _label_position(raw)
     data_row = _first_data_row(raw, label_row, label_column)
@@ -378,6 +397,9 @@ def load_rbi_indicators(
         frame = frame.drop(columns=[c for c in dict.fromkeys(drop) if c in frame.columns])
         frame.insert(0, "period", periods.to_numpy())
         frame = frame[frame["period"].notna()]
+        quarter_dates = frame["period"].map(fiscal_quarter_start)
+        if quarter_dates.notna().all():
+            frame.insert(1, "date", quarter_dates.to_numpy())
 
     for column in [c for c in frame.columns if c not in {"period", "date"}]:
         frame[column] = to_numeric(frame[column])
@@ -390,7 +412,11 @@ def load_rbi_indicators(
 
     lead = [c for c in ("period", "date") if c in frame.columns]
     ordered = lead + [c for c in frame.columns if c not in lead]
-    frame = frame[ordered].reset_index(drop=True)
+    frame = frame[ordered]
+    if "date" in frame.columns:
+        # The workbook lists the newest period first; models want the opposite.
+        frame = frame.sort_values("date", kind="mergesort")
+    frame = frame.reset_index(drop=True)
     frame.attrs["indicator_paths"] = {
         name: path for name, path in zip(names, paths) if name in frame.columns
     }

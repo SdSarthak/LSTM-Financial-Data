@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lstm-financial"
+version = "0.2.0"
+description = "LSTM forecasting for financial and macroeconomic time series"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Sarthak Doshi" }]
+dependencies = [
+    "numpy>=1.24,<2.0",
+    "pandas>=2.0",
+    "scikit-learn>=1.3",
+    "matplotlib>=3.7",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+deep-learning = ["tensorflow>=2.15,<2.20"]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+lstm-financial = "lstm_financial.cli:main"
+
+[tool.setuptools]
+packages = ["lstm_financial"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+    "ignore::DeprecationWarning:keras.*",
+]

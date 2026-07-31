@@ -94,6 +94,14 @@ def test_add_technical_indicators_drops_warmup_and_adds_columns(price_frame):
     assert enriched.index.is_monotonic_increasing
 
 
+def test_add_technical_indicators_keeps_rows_when_a_source_column_is_empty(price_frame):
+    frame = price_frame.copy()
+    frame["capital_gains"] = np.nan  # exactly how the real stock file ships it
+    enriched = features.add_technical_indicators(frame)
+    assert len(enriched) == len(features.add_technical_indicators(price_frame))
+    assert enriched["capital_gains"].isna().all()
+
+
 def test_add_technical_indicators_requires_the_price_column(price_frame):
     with pytest.raises(KeyError):
         features.add_technical_indicators(price_frame, price_column="adj_close")

@@ -9,6 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+# Feature set for modelling the price level directly.
 DEFAULT_FEATURE_COLUMNS = (
     "close",
     "log_return",
@@ -16,6 +17,17 @@ DEFAULT_FEATURE_COLUMNS = (
     "sma_30",
     "rsi_14",
     "macd",
+    "macd_histogram",
+    "volatility_20",
+    "bb_percent_b",
+)
+
+# Feature set for modelling log returns.  It deliberately excludes price levels
+# and moving averages: those trend out of the range the scaler saw during
+# training, and the network cannot extrapolate beyond it.
+DEFAULT_RETURN_FEATURE_COLUMNS = (
+    "log_return",
+    "rsi_14",
     "macd_histogram",
     "volatility_20",
     "bb_percent_b",
@@ -120,6 +132,7 @@ def add_technical_indicators(
         raise KeyError(f"{price_column!r} is not a column of the frame: {list(frame.columns)}")
 
     prices = frame[price_column].astype("float64")
+    original_columns = list(frame.columns)
     enriched = frame.copy()
     enriched["log_return"] = log_returns(prices)
     enriched["sma_10"] = simple_moving_average(prices, 10)
@@ -132,7 +145,10 @@ def add_technical_indicators(
     enriched["volatility_20"] = realised_volatility(prices)
 
     if dropna:
-        enriched = enriched.dropna()
+        # Only the warm-up of the indicators (and the price itself) may drop a
+        # row: source columns such as an always-empty "capital_gains" must not.
+        warmup_columns = [price_column] + [c for c in enriched.columns if c not in original_columns]
+        enriched = enriched.dropna(subset=warmup_columns)
     return enriched
 
 
